@@ -13,7 +13,7 @@ TOKEN = "9151851716:AAHF5Xb2AAkq_BHpwI4K5FtrYPPI7Ma2w1g"
 OWNER_ID = 8217242114  # آیدی عددی خودت رو اینجا بذار
 
 DB_FILE = "db.json"
-WAITING_FOR_GIF = {}  # برای ذخیره حالت انتظار گیف
+WAITING_FOR_GIF = {}
 
 def load_db():
     if os.path.exists(DB_FILE):
@@ -39,10 +39,8 @@ async def cmd_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("⛔ فقط سازنده ربات.")
         return
-    
     chat_id = str(update.effective_chat.id)
     targets = []
-
     if update.message.reply_to_message:
         user = update.message.reply_to_message.from_user
         targets.append({"id": user.id, "name": user.first_name or user.username or str(user.id)})
@@ -64,14 +62,12 @@ async def cmd_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db.setdefault(chat_id, {})
     if "targets" not in db[chat_id]:
         db[chat_id]["targets"] = []
-    
     existing_ids = [str(t["id"]) for t in db[chat_id]["targets"]]
     added = 0
     for t in targets:
         if str(t["id"]) not in existing_ids:
             db[chat_id]["targets"].append(t)
             added += 1
-
     save_db(db)
     total = len(db[chat_id]["targets"])
     await update.message.reply_text(f"✅ {added} نفر اضافه شد. کل لیست: {total} نفر")
@@ -114,18 +110,15 @@ async def cmd_spem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not full_text:
         await update.message.reply_text("`/spem متن1 | متن2 | متن3`", parse_mode="Markdown")
         return
-    
     new_messages = [m.strip() for m in full_text.split("|") if m.strip()]
     db.setdefault(chat_id, {})
     if "messages" not in db[chat_id]:
         db[chat_id]["messages"] = []
-    
     added = 0
     for msg in new_messages:
         if msg not in db[chat_id]["messages"]:
             db[chat_id]["messages"].append(msg)
             added += 1
-            
     save_db(db)
     total = len(db[chat_id]["messages"])
     await update.message.reply_text(f"✅ {added} متن اضافه شد. کل متن‌ها: {total}")
@@ -144,23 +137,74 @@ async def handle_gif(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
     if not WAITING_FOR_GIF.get(chat_id):
         return
-    
     if update.message.animation:
         file_id = update.message.animation.file_id
         db.setdefault(chat_id, {})
         if "gifs" not in db[chat_id]:
             db[chat_id]["gifs"] = []
-        
         if file_id not in db[chat_id]["gifs"]:
             db[chat_id]["gifs"].append(file_id)
             save_db(db)
             await update.message.reply_text(f"✅ گیف ذخیره شد. کل گیف‌ها: {len(db[chat_id]['gifs'])}")
         else:
             await update.message.reply_text("⚠️ این گیف از قبل ذخیره شده بود.")
-            
         del WAITING_FOR_GIF[chat_id]
     else:
         await update.message.reply_text("❌ لطفاً یک گیف بفرست (نه عکس یا ویدیو).")
+
+# ---------- نمایش لیست گیف‌ها ----------
+async def cmd_list_gifs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.message.reply_text("⛔ فقط سازنده ربات.")
+        return
+    chat_id = str(update.effective_chat.id)
+    gifs = db.get(chat_id, {}).get("gifs", [])
+    if not gifs:
+        await update.message.reply_text("📭 لیست گیف‌ها خالیه.", parse_mode="Markdown")
+        return
+    text = "🎬 **لیست گیف‌ها:**\n"
+    for i, gif in enumerate(gifs, 1):
+        text += f"{i}. `{gif[:20]}...`\n"
+    text += "\nبرای حذف: `/remove_gif <شماره>`"
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+# ---------- حذف تک گیف ----------
+async def cmd_remove_gif(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.message.reply_text("⛔ فقط سازنده ربات.")
+        return
+    chat_id = str(update.effective_chat.id)
+    gifs = db.get(chat_id, {}).get("gifs", [])
+    if not gifs:
+        await update.message.reply_text("📭 لیست گیف‌ها خالیه.")
+        return
+    if not context.args:
+        await update.message.reply_text("فرمت: `/remove_gif <شماره>`\nمثلاً `/remove_gif 2`", parse_mode="Markdown")
+        return
+    try:
+        index = int(context.args[0]) - 1
+        if index < 0 or index >= len(gifs):
+            await update.message.reply_text("❌ شماره نامعتبره.")
+            return
+        gifs.pop(index)
+        db[chat_id]["gifs"] = gifs
+        save_db(db)
+        await update.message.reply_text(f"🗑️ گیف شماره {index+1} حذف شد. کل گیف‌ها: {len(gifs)}")
+    except ValueError:
+        await update.message.reply_text("❌ لطفاً یه عدد بفرست.")
+
+# ---------- پاک کردن کل لیست گیف‌ها ----------
+async def cmd_clear_gifs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.message.reply_text("⛔ فقط سازنده ربات.")
+        return
+    chat_id = str(update.effective_chat.id)
+    if chat_id in db and "gifs" in db[chat_id]:
+        del db[chat_id]["gifs"]
+        save_db(db)
+        await update.message.reply_text("🗑️ کل لیست گیف‌ها پاک شد.")
+    else:
+        await update.message.reply_text("❌ لیستی برای پاک کردن وجود ندارد.")
 
 # ---------- نمایش لیست متن‌ها ----------
 async def cmd_spem_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -190,7 +234,7 @@ async def cmd_clear_spem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ لیستی برای پاک کردن وجود ندارد.")
 
-# ---------- حلقه اسپم (ترکیب متن و گیف) ----------
+# ---------- حلقه اسپم ----------
 async def spam_loop(chat_id, context):
     sent = 0
     counter = 0
@@ -205,10 +249,8 @@ async def spam_loop(chat_id, context):
         interval = cfg.get("interval", 10)
         max_total = cfg.get("max_total", 100)
         autodelete = cfg.get("autodelete", 0)
-        
         if not targets:
             break
-            
         tags_html = ""
         for t in targets:
             if isinstance(t["id"], str) and t["id"].startswith("@"):
@@ -225,22 +267,16 @@ async def spam_loop(chat_id, context):
                 active_tasks[chat_id]["running"] = False
                 await context.bot.send_message(int(chat_id), f"🏁 حداکثر {max_total} پیام. تمام.")
                 return
-
-            # تصمیم‌گیری: اگر گیف داشتیم، نوبتی گیف بفرست
             send_gif = False
-            if gifs and (counter % 3 == 0):  # هر ۳ پیام یک بار گیف
+            if gifs and (counter % 3 == 0):
                 send_gif = True
-
             try:
                 if send_gif:
                     gif_id = gifs[gif_counter % len(gifs)]
                     gif_counter += 1
                     caption = f"{tags_html} {messages[counter % len(messages)] if messages else ''}".strip()
                     msg = await context.bot.send_animation(
-                        chat_id=int(chat_id),
-                        animation=gif_id,
-                        caption=caption,
-                        parse_mode="HTML"
+                        chat_id=int(chat_id), animation=gif_id, caption=caption, parse_mode="HTML"
                     )
                 else:
                     if not messages:
@@ -248,24 +284,18 @@ async def spam_loop(chat_id, context):
                         continue
                     text = messages[counter % len(messages)]
                     msg = await context.bot.send_message(
-                        chat_id=int(chat_id),
-                        text=f"{tags_html} {text}".strip(),
-                        parse_mode="HTML"
+                        chat_id=int(chat_id), text=f"{tags_html} {text}".strip(), parse_mode="HTML"
                     )
-                
                 sent += 1
                 counter += 1
-                
                 if autodelete > 0:
                     asyncio.create_task(auto_delete(msg, autodelete))
-                    
             except Exception as e:
                 print(f"خطا: {e}")
                 if "Forbidden" in str(e):
                     active_tasks[chat_id]["running"] = False
                     return
             await asyncio.sleep(1)
-            
         for _ in range(interval):
             if not active_tasks.get(chat_id, {}).get("running"):
                 return
@@ -399,6 +429,9 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "`/spem_list` — نمایش لیست متن‌ها\n"
         "`/clear_spem` — پاک کردن لیست متن‌ها\n"
         "`/add_gif` — ذخیره گیف جدید\n"
+        "`/list_gifs` — نمایش لیست گیف‌ها\n"
+        "`/remove_gif <شماره>` — حذف یک گیف خاص\n"
+        "`/clear_gifs` — پاک کردن کل لیست گیف‌ها\n"
         "`/set_config 10 3 100 0` — تنظیمات\n"
         "`/start_spem` — شروع\n"
         "`/stop_spem` — توقف\n"
@@ -417,6 +450,9 @@ def main():
     app.add_handler(CommandHandler("spem_list", cmd_spem_list))
     app.add_handler(CommandHandler("clear_spem", cmd_clear_spem))
     app.add_handler(CommandHandler("add_gif", cmd_add_gif))
+    app.add_handler(CommandHandler("list_gifs", cmd_list_gifs))
+    app.add_handler(CommandHandler("remove_gif", cmd_remove_gif))
+    app.add_handler(CommandHandler("clear_gifs", cmd_clear_gifs))
     app.add_handler(CommandHandler("set_config", cmd_set_config))
     app.add_handler(CommandHandler("start_spem", cmd_start_spem))
     app.add_handler(CommandHandler("stop_spem", cmd_stop_spem))
@@ -424,8 +460,6 @@ def main():
     app.add_handler(CommandHandler("add_admin", cmd_add_admin))
     app.add_handler(CommandHandler("remove_admin", cmd_remove_admin))
     app.add_handler(CommandHandler("help", cmd_help))
-    
-    # هندل کردن گیف‌ها
     app.add_handler(MessageHandler(filters.ANIMATION, handle_gif))
 
     class HealthCheckHandler(BaseHTTPRequestHandler):
