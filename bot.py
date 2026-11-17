@@ -8,7 +8,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 TOKEN = "9151851716:AAHF5Xb2AAkq_BHpwI4K5FtrYPPI7Ma2w1g"
-
+OWNER_ID = 8217242114
 DB_FILE = "db.json"
 
 def load_db():
@@ -24,14 +24,10 @@ def save_db(data):
 db = load_db()
 active_tasks = {}
 
-async def is_admin(update, context):
-    try:
-        member = await context.bot.get_chat_member(
-            update.effective_chat.id, update.effective_user.id
-        )
-        return member.status in (ChatMember.ADMINISTRATOR, ChatMember.OWNER)
-    except Exception:
-        return False
+async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id == OWNER_ID:
+        return True
+    return False
 
 async def cmd_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
