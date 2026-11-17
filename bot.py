@@ -15,6 +15,9 @@ OWNER_ID = 8217242114  # آیدی عددی خودت رو اینجا بذار
 DB_FILE = "db.json"
 WAITING_FOR_GIF = {}
 
+# کلید مشترک برای همه گروه‌ها
+SHARED_KEY = "shared_data"
+
 def load_db():
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "r", encoding="utf-8") as f:
@@ -34,12 +37,11 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return True
     return False
 
-# ---------- ذخیره آیدی‌ها ----------
+# ---------- ذخیره آیدی‌ها (مشترک) ----------
 async def cmd_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("⛔ فقط سازنده ربات.")
         return
-    chat_id = str(update.effective_chat.id)
     targets = []
     if update.message.reply_to_message:
         user = update.message.reply_to_message.from_user
@@ -59,17 +61,17 @@ async def cmd_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ آیدی معتبری پیدا نشد.")
         return
 
-    db.setdefault(chat_id, {})
-    if "targets" not in db[chat_id]:
-        db[chat_id]["targets"] = []
-    existing_ids = [str(t["id"]) for t in db[chat_id]["targets"]]
+    db.setdefault(SHARED_KEY, {})
+    if "targets" not in db[SHARED_KEY]:
+        db[SHARED_KEY]["targets"] = []
+    existing_ids = [str(t["id"]) for t in db[SHARED_KEY]["targets"]]
     added = 0
     for t in targets:
         if str(t["id"]) not in existing_ids:
-            db[chat_id]["targets"].append(t)
+            db[SHARED_KEY]["targets"].append(t)
             added += 1
     save_db(db)
-    total = len(db[chat_id]["targets"])
+    total = len(db[SHARED_KEY]["targets"])
     await update.message.reply_text(f"✅ {added} نفر اضافه شد. کل لیست: {total} نفر")
 
 # ---------- نمایش لیست آیدی‌ها ----------
@@ -77,8 +79,7 @@ async def cmd_targets(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("⛔ فقط سازنده ربات.")
         return
-    chat_id = str(update.effective_chat.id)
-    targets = db.get(chat_id, {}).get("targets", [])
+    targets = db.get(SHARED_KEY, {}).get("targets", [])
     if not targets:
         await update.message.reply_text("📭 لیست خالیه. اول با `/id` آیدی اضافه کن.", parse_mode="Markdown")
         return
@@ -92,60 +93,56 @@ async def cmd_clear_ids(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("⛔ فقط سازنده ربات.")
         return
-    chat_id = str(update.effective_chat.id)
-    if chat_id in db and "targets" in db[chat_id]:
-        del db[chat_id]["targets"]
+    if SHARED_KEY in db and "targets" in db[SHARED_KEY]:
+        del db[SHARED_KEY]["targets"]
         save_db(db)
         await update.message.reply_text("🗑️ لیست آیدی‌ها پاک شد.")
     else:
         await update.message.reply_text("❌ لیستی برای پاک کردن وجود ندارد.")
 
-# ---------- ذخیره متن‌ها ----------
+# ---------- ذخیره متن‌ها (مشترک) ----------
 async def cmd_spem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("⛔ فقط سازنده ربات.")
         return
-    chat_id = str(update.effective_chat.id)
     full_text = update.message.text.replace("/spem", "", 1).strip()
     if not full_text:
         await update.message.reply_text("`/spem متن1 | متن2 | متن3`", parse_mode="Markdown")
         return
     new_messages = [m.strip() for m in full_text.split("|") if m.strip()]
-    db.setdefault(chat_id, {})
-    if "messages" not in db[chat_id]:
-        db[chat_id]["messages"] = []
+    db.setdefault(SHARED_KEY, {})
+    if "messages" not in db[SHARED_KEY]:
+        db[SHARED_KEY]["messages"] = []
     added = 0
     for msg in new_messages:
-        if msg not in db[chat_id]["messages"]:
-            db[chat_id]["messages"].append(msg)
+        if msg not in db[SHARED_KEY]["messages"]:
+            db[SHARED_KEY]["messages"].append(msg)
             added += 1
     save_db(db)
-    total = len(db[chat_id]["messages"])
+    total = len(db[SHARED_KEY]["messages"])
     await update.message.reply_text(f"✅ {added} متن اضافه شد. کل متن‌ها: {total}")
 
-# ---------- ذخیره گیف ----------
+# ---------- ذخیره گیف (مشترک) ----------
 async def cmd_add_gif(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("⛔ فقط سازنده ربات.")
         return
-    chat_id = str(update.effective_chat.id)
-    WAITING_FOR_GIF[chat_id] = True
+    WAITING_FOR_GIF[update.effective_chat.id] = True
     await update.message.reply_text("🎬 حالا گیف مورد نظرت رو بفرست تا ذخیره کنم.")
 
-# ---------- هندل کردن گیف‌های دریافتی ----------
 async def handle_gif(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = str(update.effective_chat.id)
+    chat_id = update.effective_chat.id
     if not WAITING_FOR_GIF.get(chat_id):
         return
     if update.message.animation:
         file_id = update.message.animation.file_id
-        db.setdefault(chat_id, {})
-        if "gifs" not in db[chat_id]:
-            db[chat_id]["gifs"] = []
-        if file_id not in db[chat_id]["gifs"]:
-            db[chat_id]["gifs"].append(file_id)
+        db.setdefault(SHARED_KEY, {})
+        if "gifs" not in db[SHARED_KEY]:
+            db[SHARED_KEY]["gifs"] = []
+        if file_id not in db[SHARED_KEY]["gifs"]:
+            db[SHARED_KEY]["gifs"].append(file_id)
             save_db(db)
-            await update.message.reply_text(f"✅ گیف ذخیره شد. کل گیف‌ها: {len(db[chat_id]['gifs'])}")
+            await update.message.reply_text(f"✅ گیف ذخیره شد. کل گیف‌ها: {len(db[SHARED_KEY]['gifs'])}")
         else:
             await update.message.reply_text("⚠️ این گیف از قبل ذخیره شده بود.")
         del WAITING_FOR_GIF[chat_id]
@@ -157,8 +154,7 @@ async def cmd_list_gifs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("⛔ فقط سازنده ربات.")
         return
-    chat_id = str(update.effective_chat.id)
-    gifs = db.get(chat_id, {}).get("gifs", [])
+    gifs = db.get(SHARED_KEY, {}).get("gifs", [])
     if not gifs:
         await update.message.reply_text("📭 لیست گیف‌ها خالیه.", parse_mode="Markdown")
         return
@@ -173,13 +169,12 @@ async def cmd_remove_gif(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("⛔ فقط سازنده ربات.")
         return
-    chat_id = str(update.effective_chat.id)
-    gifs = db.get(chat_id, {}).get("gifs", [])
+    gifs = db.get(SHARED_KEY, {}).get("gifs", [])
     if not gifs:
         await update.message.reply_text("📭 لیست گیف‌ها خالیه.")
         return
     if not context.args:
-        await update.message.reply_text("فرمت: `/remove_gif <شماره>`\nمثلاً `/remove_gif 2`", parse_mode="Markdown")
+        await update.message.reply_text("فرمت: `/remove_gif <شماره>`", parse_mode="Markdown")
         return
     try:
         index = int(context.args[0]) - 1
@@ -187,20 +182,19 @@ async def cmd_remove_gif(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ شماره نامعتبره.")
             return
         gifs.pop(index)
-        db[chat_id]["gifs"] = gifs
+        db[SHARED_KEY]["gifs"] = gifs
         save_db(db)
         await update.message.reply_text(f"🗑️ گیف شماره {index+1} حذف شد. کل گیف‌ها: {len(gifs)}")
     except ValueError:
         await update.message.reply_text("❌ لطفاً یه عدد بفرست.")
 
-# ---------- پاک کردن کل لیست گیف‌ها ----------
+# ---------- پاک کردن کل گیف‌ها ----------
 async def cmd_clear_gifs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("⛔ فقط سازنده ربات.")
         return
-    chat_id = str(update.effective_chat.id)
-    if chat_id in db and "gifs" in db[chat_id]:
-        del db[chat_id]["gifs"]
+    if SHARED_KEY in db and "gifs" in db[SHARED_KEY]:
+        del db[SHARED_KEY]["gifs"]
         save_db(db)
         await update.message.reply_text("🗑️ کل لیست گیف‌ها پاک شد.")
     else:
@@ -211,8 +205,7 @@ async def cmd_spem_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("⛔ فقط سازنده ربات.")
         return
-    chat_id = str(update.effective_chat.id)
-    messages = db.get(chat_id, {}).get("messages", [])
+    messages = db.get(SHARED_KEY, {}).get("messages", [])
     if not messages:
         await update.message.reply_text("📭 لیست متن‌ها خالیه.", parse_mode="Markdown")
         return
@@ -226,9 +219,8 @@ async def cmd_clear_spem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("⛔ فقط سازنده ربات.")
         return
-    chat_id = str(update.effective_chat.id)
-    if chat_id in db and "messages" in db[chat_id]:
-        del db[chat_id]["messages"]
+    if SHARED_KEY in db and "messages" in db[SHARED_KEY]:
+        del db[SHARED_KEY]["messages"]
         save_db(db)
         await update.message.reply_text("🗑️ لیست متن‌ها پاک شد.")
     else:
@@ -240,7 +232,7 @@ async def spam_loop(chat_id, context):
     counter = 0
     gif_counter = 0
     while active_tasks.get(chat_id, {}).get("running"):
-        data = db.get(chat_id, {})
+        data = db.get(SHARED_KEY, {})
         messages = data.get("messages", [])
         gifs = data.get("gifs", [])
         targets = data.get("targets", [])
@@ -313,7 +305,6 @@ async def cmd_set_config(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("⛔ فقط سازنده ربات.")
         return
-    chat_id = str(update.effective_chat.id)
     try:
         interval = int(context.args[0])
         per_round = int(context.args[1])
@@ -322,8 +313,8 @@ async def cmd_set_config(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except (IndexError, ValueError):
         await update.message.reply_text("`/set_config 10 3 100 0`", parse_mode="Markdown")
         return
-    db.setdefault(chat_id, {})
-    db[chat_id]["config"] = {"interval": interval, "per_round": per_round, "max_total": max_total, "autodelete": autodelete}
+    db.setdefault(SHARED_KEY, {})
+    db[SHARED_KEY]["config"] = {"interval": interval, "per_round": per_round, "max_total": max_total, "autodelete": autodelete}
     save_db(db)
     await update.message.reply_text("⚙️ تنظیم شد.")
 
@@ -332,7 +323,7 @@ async def cmd_start_spem(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ فقط سازنده ربات.")
         return
     chat_id = str(update.effective_chat.id)
-    data = db.get(chat_id, {})
+    data = db.get(SHARED_KEY, {})
     if not data.get("targets"):
         await update.message.reply_text("❌ اول با `/id` آیدی‌ها را ذخیره کن.", parse_mode="Markdown")
         return
@@ -361,14 +352,14 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("⛔ فقط سازنده ربات.")
         return
+    data = db.get(SHARED_KEY, {})
     chat_id = str(update.effective_chat.id)
-    data = db.get(chat_id, {})
     running = active_tasks.get(chat_id, {}).get("running", False)
     await update.message.reply_text(
         f"📊 تعداد آیدی‌ها: {len(data.get('targets', []))}\n"
         f"تعداد متن‌ها: {len(data.get('messages', []))}\n"
         f"تعداد گیف‌ها: {len(data.get('gifs', []))}\n"
-        f"وضعیت: {'🟢 فعال' if running else '🔴 خاموش'}",
+        f"وضعیت در این گروه: {'🟢 فعال' if running else '🔴 خاموش'}",
         parse_mode="Markdown"
     )
 
