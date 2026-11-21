@@ -64,7 +64,7 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def get_done_keyboard(uid, kind):
     return InlineKeyboardMarkup([[InlineKeyboardButton("✅ تموم شد، ذخیره کن", callback_data=f"done_{kind}_{uid}")]])
 
-# ================== جمع‌آوری ==================
+# ================== جمع‌آوری محتوا ==================
 async def start_collect(update, context, kind):
     if update.effective_chat.type != "private":
         await update.message.reply_text("⚠️ فقط توی چت خصوصی ربات کار می‌کنه.")
@@ -211,7 +211,7 @@ async def cmd_status(update, context):
     running = active_tasks.get(str(update.effective_chat.id), {}).get("running", False)
     await update.message.reply_text(f"📊 انگشت‌شده‌ها: {len(d.get('targets', []))}\nمتن: {len(d.get('messages', []))}\nگیف: {len(d.get('gifs', []))}\nوضعیت: {'🟢 در حال بکنش' if running else '🔴 خاموش'}")
 
-# ================== حلقه اسپم (با ضدبلاک هوشمند) ==================
+# ================== حلقه اسپم ==================
 async def spam_loop(chat_id, context, reply_to=None):
     sent = 0
     smart = SmartAntiBlock()
@@ -384,20 +384,31 @@ async def handle_text_cmds(update, context):
     t = update.message.text
     if not t.startswith("."): return
     p = t[1:].split()
+    if not p: return
     cmd = p[0]
     context.args = p[1:]
+    
+    # نرمال‌سازی دستور (جایگزینی فاصله با زیرخط و حذف فاصله‌های اضافه)
+    cmd_clean = cmd.replace(" ", "_").strip()
+    
     routes = {
         "متن": cmd_text, "گیف": cmd_gif, "استیکر": cmd_sticker, "عکس": cmd_photo, "ویدیو": cmd_video,
         "متن‌ها": cmd_texts_list, "لیست_گیف": cmd_gifs_list, "لیست_استیکر": cmd_stickers_list,
         "لیست_عکس": cmd_photos_list, "لیست_ویدیو": cmd_videos_list,
         "پاک_متن": cmd_clear_texts, "پاک_گیف": cmd_clear_gifs, "پاک_استیکر": cmd_clear_stickers,
         "پاک_عکس": cmd_clear_photos, "پاک_ویدیو": cmd_clear_videos,
-        "انگشتش کن": cmd_id, "تگ‌ها": cmd_targets, "پاک_ایدی": cmd_clear_ids,
         "بکنش": cmd_start, "نکنش": cmd_stop, "وضعیت": cmd_status,
         "ادمین": cmd_add_admin, "حذف_ادمین": cmd_remove_admin, "منو": cmd_menu,
         "راهنما": cmd_help,
     }
-    if cmd in routes: await routes[cmd](update, context)
+    
+    # دستورات مربوط به آیدی (چند حالت مختلف)
+    id_commands = ["انگشتش_کن", "انگشتش", "ایدی", "id"]
+    
+    if cmd_clean in id_commands:
+        await cmd_id(update, context)
+    elif cmd_clean in routes:
+        await routes[cmd_clean](update, context)
 
 def main():
     app = Application.builder().token(TOKEN).build()
